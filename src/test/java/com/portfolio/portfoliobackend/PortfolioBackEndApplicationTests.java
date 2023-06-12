@@ -1,10 +1,10 @@
-package com.portifolio.portifoliobackend;
+package com.portfolio.portfoliobackend;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class PortifolioBackEndApplicationTests {
+class PortfolioBackEndApplicationTests {
 
 	@Test
 	void contextLoads() {

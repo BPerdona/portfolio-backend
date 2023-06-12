@@ -1,4 +1,4 @@
-package com.portifolio.portifoliobackend.config;
+package com.portifolio.portifoliobackend.configs;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

@@ -2,19 +2,23 @@ package com.portfolio.portfoliobackend;
 
 import com.portfolio.portfoliobackend.auth.*;
 import com.portfolio.portfoliobackend.enums.Role;
+import com.portfolio.portfoliobackend.models.Token;
 import com.portfolio.portfoliobackend.models.User;
+import com.portfolio.portfoliobackend.repositories.TokenRepository;
 import com.portfolio.portfoliobackend.repositories.UserRepository;
+import com.portfolio.portfoliobackend.security.jwt.JwtService;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.junit4.SpringRunner;
 
+
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -30,7 +34,10 @@ public class JwtAuthControllerTest {
     private TestRestTemplate restTemplate;
 
     @Autowired
-    private UserRepository repository;
+    private UserRepository userRepository;
+
+    @Autowired
+    private TokenRepository tokenRepository;
 
     private final String BASE_URL = "/api/v1/auth";
 
@@ -38,6 +45,7 @@ public class JwtAuthControllerTest {
     private final RegisterRequest mockUser =
             new RegisterRequest("John", "john@gmail.com", "password123");
 
+    // Registration
     @Test
     @DirtiesContext
     public void registrationWorksThroughAllLayer(){
@@ -48,7 +56,7 @@ public class JwtAuthControllerTest {
         );
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
 
-        User repUser = repository.findByEmail(mockUser.getEmail()).get();
+        User repUser = userRepository.findByEmail(mockUser.getEmail()).get();
         assertThat(repUser).isNotNull();
         assertThat(repUser.getEmail()).isEqualTo(mockUser.getEmail());
         assertThat(repUser.getName()).isEqualTo(mockUser.getName());
@@ -72,7 +80,7 @@ public class JwtAuthControllerTest {
         );
 
         assertThat(repeatResponse.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
-        repository.delete(repository.findByEmail(mockUser.getEmail()).orElseThrow());
+        userRepository.delete(userRepository.findByEmail(mockUser.getEmail()).orElseThrow());
     }
 
     @Test
@@ -120,6 +128,7 @@ public class JwtAuthControllerTest {
         assertThat(spacesResponse.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 
+    // Authentication
     @Test
     @DirtiesContext
     public void authenticateWorksProperly(){
@@ -137,7 +146,7 @@ public class JwtAuthControllerTest {
 
         assertThat(authResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(authResponse.getBody()).isNotNull();
-        repository.delete(repository.findByEmail(mockUser.getEmail()).orElseThrow());
+        userRepository.delete(userRepository.findByEmail(mockUser.getEmail()).orElseThrow());
     }
 
     @Test
@@ -207,5 +216,71 @@ public class JwtAuthControllerTest {
 
         assertThat(authResponse.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
         assertThat(authResponse.getBody()).isEqualTo(null);
+    }
+
+    // Logout
+    @Test
+    @DirtiesContext
+    public void logoutProperly(){
+        var token = restTemplate.postForEntity(
+                BASE_URL+"/register",
+                mockUser,
+                AuthenticationResponse.class
+        ).getBody().getToken();
+
+        assertThat(token).isNotNull();
+
+        HttpHeaders header = new HttpHeaders();
+        header.setContentType(MediaType.APPLICATION_JSON);
+        header.set("Authorization", "Bearer "+token);
+
+        HttpEntity<String> entity = new HttpEntity<>("",header);
+        ResponseEntity<String> response = restTemplate.postForEntity(
+                BASE_URL+"/logout",
+                entity,
+                String.class
+        );
+
+        Token mockUserToken = tokenRepository.findByToken(token).orElseThrow();
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isNull();
+        assertThat(mockUserToken.isExpired()).isTrue();
+        assertThat(mockUserToken.isRevoked()).isTrue();
+    }
+
+    @Test
+    public void logoutWithAWrongTokenReturnBadRequest(){
+        String randomToken = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJicnVub0BnbWFpbC5jb20iL" +
+                "CJpYXQiOjE2ODcxMzU0NTksImV4cCI6MTY4NzEzODMzOX0.fVb4oAhvgsY4aNW0KOWCUm" +
+                "Ed5guK5v-vl800qHTv5DM";
+
+        HttpHeaders header = new HttpHeaders();
+        header.setContentType(MediaType.APPLICATION_JSON);
+        header.set("Authorization", "Bearer "+randomToken);
+
+        HttpEntity<String> entity = new HttpEntity<>("",header);
+        ResponseEntity<String> response = restTemplate.postForEntity(
+                BASE_URL+"/logout",
+                entity,
+                String.class
+        );
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    public void logoutWithAEmptyTokenReturnBadRequest(){
+        HttpHeaders header = new HttpHeaders();
+        header.setContentType(MediaType.APPLICATION_JSON);
+        header.set("Authorization", "Bearer ");
+
+        HttpEntity<String> entity = new HttpEntity<>("",header);
+        ResponseEntity<String> response = restTemplate.postForEntity(
+                BASE_URL+"/logout",
+                entity,
+                String.class
+        );
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 }

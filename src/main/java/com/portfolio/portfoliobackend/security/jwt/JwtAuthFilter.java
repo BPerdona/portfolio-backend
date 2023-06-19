@@ -1,5 +1,6 @@
 package com.portfolio.portfoliobackend.security.jwt;
 
+import com.portfolio.portfoliobackend.repositories.TokenRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -20,6 +21,7 @@ import java.io.IOException;
 @RequiredArgsConstructor
 public class JwtAuthFilter extends OncePerRequestFilter {
 
+    private final TokenRepository tokenRepository;
     private final JwtService jwtService;
     private final UserDetailsService userDetailsService;
 
@@ -40,7 +42,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         userEmail = jwtService.extractUsername(jwtToken);
         if (!userEmail.isBlank() && SecurityContextHolder.getContext().getAuthentication() == null){
             UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail);
-            if (jwtService.isTokenValid(jwtToken, userDetails)){
+            var isTokenValid = tokenRepository.findByToken(jwtToken)
+                    .map((token) -> (!token.isRevoked() && !token.isExpired()))
+                    .orElse(false);
+            if (jwtService.isTokenValid(jwtToken, userDetails) && isTokenValid){
                 UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                         userDetails,
                         null,

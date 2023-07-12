@@ -5,7 +5,7 @@ spring:
     password: password
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: create-drop
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
@@ -14,3 +14,11 @@ spring:
           lob:
             non_contextual_creation: true
       show-sql: true
+
+application:
+  security:
+    jwt:
+      secret-key: FF96814BEF37EDB1A23F6A5761F6DFF96814BEF37EDB1A23F6A5761F6D
+      expiration: 86400000 # 1 Day
+      refresh-token:
+        expiration: 604800000 # 7 Days

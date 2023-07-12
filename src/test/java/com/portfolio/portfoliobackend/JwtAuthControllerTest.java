@@ -6,7 +6,6 @@ import com.portfolio.portfoliobackend.models.Token;
 import com.portfolio.portfoliobackend.models.User;
 import com.portfolio.portfoliobackend.repositories.TokenRepository;
 import com.portfolio.portfoliobackend.repositories.UserRepository;
-import com.portfolio.portfoliobackend.security.jwt.JwtService;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,8 +16,6 @@ import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.junit4.SpringRunner;
 
-
-import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -226,7 +223,7 @@ public class JwtAuthControllerTest {
                 BASE_URL+"/register",
                 mockUser,
                 AuthenticationResponse.class
-        ).getBody().getToken();
+        ).getBody().getAccessToken();
 
         assertThat(token).isNotNull();
 

@@ -39,7 +39,7 @@ public class AuthenticationService {
         var savedUser = userRepository.save(user);
         var jwtToken = jwtService.generateToken(user);
         var refreshToken = jwtService.generateRefreshToken(user);
-        saveUserToken(savedUser, jwtToken);
+        saveUserToken(savedUser, jwtToken, refreshToken);
         return AuthenticationResponse.builder()
                 .accessToken(jwtToken)
                 .refreshToken(refreshToken)
@@ -57,7 +57,7 @@ public class AuthenticationService {
         var jwtToken = jwtService.generateToken(user);
         var refreshToken = jwtService.generateRefreshToken(user);
         revokeAllUserTokens(user);
-        saveUserToken(user, jwtToken);
+        saveUserToken(user, jwtToken, refreshToken);
         return AuthenticationResponse.builder()
                 .accessToken(jwtToken)
                 .refreshToken(refreshToken)
@@ -75,41 +75,47 @@ public class AuthenticationService {
         tokenRepository.saveAll(validUserTokens);
     }
 
-    private void saveUserToken(User user, String jwtToken) {
+    private void saveUserToken(User user, String jwtToken, String refreshToken) {
         var token = Token.builder()
                 .user(user)
                 .token(jwtToken)
                 .tokenType(TokenType.BAERER)
+                .refreshToken(refreshToken)
                 .expired(false)
                 .revoked(false)
+                .refreshTokenRevoked(false)
                 .build();
         tokenRepository.save(token);
     }
 
-    public void refreshToken(HttpServletRequest request, HttpServletResponse response) throws IOException {
+    public AuthenticationResponse refreshToken(HttpServletRequest request) throws IOException {
         final String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
         final String refreshToken;
         final String userEmail;
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")){
-            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-            return;
+            return null;
         }
-
         refreshToken = authHeader.substring(7);
         userEmail = jwtService.extractUsername(refreshToken);
-        if (!userEmail.isBlank()){
+
+        var userToken = tokenRepository.findByRefreshTokenAndRefreshTokenRevokedIsFalse(refreshToken)
+                .orElseThrow();
+
+        if (!userEmail.isBlank() || !userToken.isRefreshTokenRevoked()){
             var userDetails = this.userRepository.findByEmail(userEmail).orElseThrow();
             if (jwtService.isTokenValid(refreshToken, userDetails)){
+                userToken.setRefreshTokenRevoked(true);
+                tokenRepository.save(userToken);
                 var accessToken = jwtService.generateToken(userDetails);
                 revokeAllUserTokens(userDetails);
-                saveUserToken(userDetails, accessToken);
-                var authResponse = AuthenticationResponse.builder()
+                saveUserToken(userDetails, accessToken, refreshToken);
+                return AuthenticationResponse.builder()
                         .accessToken(accessToken)
                         .refreshToken(refreshToken)
                         .build();
-                new ObjectMapper().writeValue(response.getOutputStream(), authResponse);
             }
         }
+        return null;
     }
 }

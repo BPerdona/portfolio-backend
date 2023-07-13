@@ -53,7 +53,7 @@ public class JwtAuthControllerTest {
         );
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
 
-        User repUser = userRepository.findByEmail(mockUser.getEmail()).get();
+        User repUser = userRepository.findByEmail(mockUser.getEmail()).orElseThrow();
         assertThat(repUser).isNotNull();
         assertThat(repUser.getEmail()).isEqualTo(mockUser.getEmail());
         assertThat(repUser.getName()).isEqualTo(mockUser.getName());
@@ -77,7 +77,7 @@ public class JwtAuthControllerTest {
         );
 
         assertThat(repeatResponse.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
-        userRepository.delete(userRepository.findByEmail(mockUser.getEmail()).orElseThrow());
+        deleteMock();
     }
 
     @Test
@@ -143,7 +143,7 @@ public class JwtAuthControllerTest {
 
         assertThat(authResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(authResponse.getBody()).isNotNull();
-        userRepository.delete(userRepository.findByEmail(mockUser.getEmail()).orElseThrow());
+        deleteMock();
     }
 
     @Test
@@ -175,6 +175,7 @@ public class JwtAuthControllerTest {
 
         assertThat(authResponse.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
         assertThat(authResponse.getBody()).isEqualTo(null);
+        deleteMock();
     }
 
     @Test
@@ -217,32 +218,33 @@ public class JwtAuthControllerTest {
 
     // Logout
     @Test
-    @DirtiesContext
     public void logoutProperly(){
-        var token = restTemplate.postForEntity(
+        var registerResponse = restTemplate.postForEntity(
                 BASE_URL+"/register",
                 mockUser,
                 AuthenticationResponse.class
-        ).getBody().getAccessToken();
+        );
 
+        assertThat(registerResponse).isNotNull();
+        assertThat(registerResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(registerResponse.getBody()).isNotNull();
+
+        var token = registerResponse.getBody().getAccessToken();
         assertThat(token).isNotNull();
 
-        HttpHeaders header = new HttpHeaders();
-        header.setContentType(MediaType.APPLICATION_JSON);
-        header.set("Authorization", "Bearer "+token);
-
-        HttpEntity<String> entity = new HttpEntity<>("",header);
         ResponseEntity<String> response = restTemplate.postForEntity(
                 BASE_URL+"/logout",
-                entity,
+                createHttpEntity(token),
                 String.class
         );
 
-        Token mockUserToken = tokenRepository.findByToken(token).orElseThrow();
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNull();
+
+        Token mockUserToken = tokenRepository.findByToken(token).orElseThrow();
         assertThat(mockUserToken.isExpired()).isTrue();
         assertThat(mockUserToken.isRevoked()).isTrue();
+        deleteMock();
     }
 
     @Test
@@ -251,14 +253,9 @@ public class JwtAuthControllerTest {
                 "CJpYXQiOjE2ODcxMzU0NTksImV4cCI6MTY4NzEzODMzOX0.fVb4oAhvgsY4aNW0KOWCUm" +
                 "Ed5guK5v-vl800qHTv5DM";
 
-        HttpHeaders header = new HttpHeaders();
-        header.setContentType(MediaType.APPLICATION_JSON);
-        header.set("Authorization", "Bearer "+randomToken);
-
-        HttpEntity<String> entity = new HttpEntity<>("",header);
         ResponseEntity<String> response = restTemplate.postForEntity(
                 BASE_URL+"/logout",
-                entity,
+                createHttpEntity(randomToken),
                 String.class
         );
 
@@ -267,17 +264,114 @@ public class JwtAuthControllerTest {
 
     @Test
     public void logoutWithAEmptyTokenReturnBadRequest(){
-        HttpHeaders header = new HttpHeaders();
-        header.setContentType(MediaType.APPLICATION_JSON);
-        header.set("Authorization", "Bearer ");
-
-        HttpEntity<String> entity = new HttpEntity<>("",header);
         ResponseEntity<String> response = restTemplate.postForEntity(
                 BASE_URL+"/logout",
-                entity,
+                createHttpEntity(""),
                 String.class
         );
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    // Refresh Token
+    @Test
+    public void basicRefreshTokenCycle(){
+        ResponseEntity<AuthenticationResponse> response = restTemplate.postForEntity(
+                BASE_URL+"/register",
+                mockUser,
+                AuthenticationResponse.class
+        );
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isNotNull();
+
+        var token = tokenRepository.findByToken(response.getBody().getAccessToken()).orElseThrow();
+        token.setRevoked(true);
+        token.setExpired(true);
+        tokenRepository.save(token);
+
+        var refreshResponse = restTemplate.postForEntity(
+                BASE_URL+"/refresh-token",
+                createHttpEntity(token.getRefreshToken()),
+                AuthenticationResponse.class
+        );
+
+        assertThat(refreshResponse).isNotNull();
+        assertThat(refreshResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        var responseToken = refreshResponse.getBody();
+        assert responseToken != null;
+        assertThat(responseToken.getRefreshToken()).isEqualTo(token.getRefreshToken());
+        assertThat(responseToken.getAccessToken()).isNotBlank();
+
+        var newToken = tokenRepository.findByRefreshTokenAndRefreshTokenRevokedIsFalse(responseToken.getRefreshToken()).orElseThrow();
+        assertThat(newToken.isExpired()).isFalse();
+        assertThat(newToken.isRevoked()).isFalse();
+        assertThat(newToken.isRefreshTokenRevoked()).isFalse();
+
+        deleteMock();
+    }
+
+    @Test
+    public void refreshTokenWithoutTokenReturnForbidden(){
+        var refreshResponse = restTemplate.postForEntity(
+                BASE_URL+"/refresh-token",
+                createHttpEntity(""),
+                AuthenticationResponse.class
+        );
+
+        assertThat(refreshResponse).isNotNull();
+        assertThat(refreshResponse.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(refreshResponse.getBody()).isNull();
+    }
+
+    @Test
+    public void refreshTokenWithLogoutUserReturnsForbidden(){
+        ResponseEntity<AuthenticationResponse> response = restTemplate.postForEntity(
+                BASE_URL+"/register",
+                mockUser,
+                AuthenticationResponse.class
+        );
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isNotNull();
+
+        var token = response.getBody().getAccessToken();
+        ResponseEntity<String> logoutResponse = restTemplate.postForEntity(
+                BASE_URL+"/logout",
+                createHttpEntity(token),
+                String.class
+        );
+
+        assertThat(logoutResponse).isNotNull();
+        assertThat(logoutResponse.getBody()).isNull();
+        assertThat(logoutResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        var refreshToken = response.getBody().getRefreshToken();
+        var refreshResponse = restTemplate.postForEntity(
+                BASE_URL+"/refresh-token",
+                createHttpEntity(refreshToken),
+                AuthenticationResponse.class
+        );
+
+        assertThat(refreshResponse).isNotNull();
+        assertThat(refreshResponse.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(refreshResponse.getBody()).isNull();
+    }
+
+
+    public HttpEntity<String> createHttpEntity(String token){
+        if (token == null){
+            token = "";
+        }
+
+        HttpHeaders header = new HttpHeaders();
+        header.setContentType(MediaType.APPLICATION_JSON);
+        header.set("Authorization", "Bearer "+token);
+        return new HttpEntity<>("", header);
+    }
+
+    public void deleteMock(){
+        userRepository.delete(userRepository.findByEmail(mockUser.getEmail()).orElseThrow());
     }
 }

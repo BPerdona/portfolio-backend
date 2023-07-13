@@ -18,10 +18,14 @@ public class Token {
     @GeneratedValue
     private Long id;
     private String token;
+    @Column(name = "refresh_token")
+    private String refreshToken;
     @Enumerated(EnumType.STRING)
     private TokenType tokenType;
     private boolean expired;
     private boolean revoked;
+    @Column(name = "refresh_token_revoked")
+    private boolean refreshTokenRevoked;
 
     @ManyToOne
     @JoinColumn(name = "user_id")

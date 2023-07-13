@@ -38,8 +38,11 @@ public class AuthenticationController {
     }
 
     @PostMapping("/refresh-token")
-    public void refreshToken(HttpServletRequest request, HttpServletResponse response) throws IOException {
-        service.refreshToken(request, response);
+    public ResponseEntity<AuthenticationResponse> refreshToken(HttpServletRequest request) throws IOException {
+        var result = service.refreshToken(request);
+        if (result==null)
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        return ResponseEntity.ok(result);
     }
 
 

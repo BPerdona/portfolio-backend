@@ -1,5 +1,6 @@
 package com.portfolio.portfoliobackend.auth;
 
+import com.portfolio.portfoliobackend.enums.Role;
 import com.portfolio.portfoliobackend.repositories.UserRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -20,6 +21,9 @@ public class AuthenticationController {
 
     @PostMapping("/register")
     public ResponseEntity<AuthenticationResponse> register(@RequestBody RegisterRequest request){
+        if (request.getRole() == Role.ADMIN){
+            return ResponseEntity.badRequest().build();
+        }
 
         if (repository.findByEmail(request.getEmail()).isPresent())
             return ResponseEntity.status(HttpStatus.CONFLICT).build();

@@ -40,7 +40,7 @@ public class JwtAuthControllerTest {
 
 
     private final RegisterRequest mockUser =
-            new RegisterRequest("John", "john@gmail.com", "password123");
+            new RegisterRequest("John", "john@gmail.com", "password123", Role.USER);
 
     // Registration
     @Test
@@ -105,7 +105,7 @@ public class JwtAuthControllerTest {
 
     @Test
     public void registerWithEmptyValuesShouldReturnBadRequest(){
-        RegisterRequest emptyRequest = new RegisterRequest("","","");
+        RegisterRequest emptyRequest = new RegisterRequest("","","", null);
         ResponseEntity<AuthenticationResponse> emptyResponse = restTemplate.postForEntity(
                 BASE_URL+"/register",
                 emptyRequest,
@@ -116,7 +116,7 @@ public class JwtAuthControllerTest {
 
     @Test
     public void registerWithSpacesValuesShouldReturnBadRequest() {
-        RegisterRequest spacesRequest = new RegisterRequest("   ","   ","   ");
+        RegisterRequest spacesRequest = new RegisterRequest("   ","   ","   ", null);
         ResponseEntity<AuthenticationResponse> spacesResponse = restTemplate.postForEntity(
                 BASE_URL+"/register",
                 spacesRequest,

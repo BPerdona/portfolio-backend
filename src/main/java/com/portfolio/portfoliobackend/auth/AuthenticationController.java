@@ -25,6 +25,10 @@ public class AuthenticationController {
             return ResponseEntity.badRequest().build();
         }
 
+        if (request.getRole() == null){
+            request.setRole(Role.USER);
+        }
+
         if (repository.findByEmail(request.getEmail()).isPresent())
             return ResponseEntity.status(HttpStatus.CONFLICT).build();
 
